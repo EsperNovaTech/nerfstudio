@@ -1,0 +1,38 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main  # Trigger the workflow on push to main branch
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest  # Run the job on an Ubuntu runner
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}  # Use the secret you just created
+
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v2
+        with:
+          context: .  # Docker build context
+          file: ./Dockerfile  # Dockerfile path
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/nerfstudio:latest  # Replace with your desired image name and tag
+          build-args: |
+            CUDA_VERSION=11.8.0
+            CUDA_ARCHITECTURES=86
+            OS_VERSION=22.04
+            USER_ID=1000  # You may want to customize this if needed
