@@ -176,6 +176,38 @@ To enable PyNeRF, you must install it first by running:
     )
 )
 
+# SeaThru-NeRF
+external_methods.append(
+    ExternalMethod(
+        """[bold yellow]Seathru-NeRF[/bold yellow]
+For more information visit https://docs.nerf.studio/nerfology/methods/seathru_nerf.html
+
+To enable Seathru-NeRF, you must install it first by running:
+  [grey]pip install git+https://github.com/AkerBP/seathru_nerf[/grey]""",
+        configurations=[
+            ("seathru-nerf", "SeaThru-NeRF for underwater scenes."),
+            ("seathru-nerf-lite", "SeaThru-NeRF for underwater scenes (smaller networks and batches)."),
+        ],
+        pip_package="git+https://github.com/AkerBP/seathru_nerf",
+    )
+)
+
+# Zip-NeRF
+external_methods.append(
+    ExternalMethod(
+        """[bold yellow]Zip-NeRF[/bold yellow]
+For more information visit https://docs.nerf.studio/nerfology/methods/zipnerf.html
+
+To enable Zip-NeRF, you must install it first by running:
+  [grey]pip install git+https://github.com/SuLvXiangXin/zipnerf-pytorch#subdirectory=extensions/cuda 
+  and pip install git+https://github.com/SuLvXiangXin/zipnerf-pytorch[/grey]""",
+        configurations=[
+            ("zipnerf", "A pytorch implementation of 'Zip-NeRF: Anti-Aliased Grid-Based Neural Radiance Fields'")
+        ],
+        pip_package="pip install git+https://github.com/SuLvXiangXin/zipnerf-pytorch",
+    )
+)
+
 
 @dataclass
 class ExternalMethodDummyTrainerConfig:
