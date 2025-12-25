@@ -15,6 +15,7 @@
 """
 Camera Models
 """
+
 import base64
 import math
 from dataclasses import dataclass
@@ -170,7 +171,7 @@ class Cameras(TensorDataclass):
             name: The name of the variable. Used for error messages
         """
         if isinstance(fc_xy, float):
-            fc_xy = torch.Tensor([fc_xy], device=self.device)
+            fc_xy = torch.tensor([fc_xy], device=self.device)
         elif isinstance(fc_xy, torch.Tensor):
             if fc_xy.ndim == 0 or fc_xy.shape[-1] != 1:
                 fc_xy = fc_xy.unsqueeze(-1)
@@ -204,9 +205,9 @@ class Cameras(TensorDataclass):
         elif isinstance(camera_type, int):
             camera_type = torch.tensor([camera_type], device=self.device)
         elif isinstance(camera_type, torch.Tensor):
-            assert not torch.is_floating_point(
-                camera_type
-            ), f"camera_type tensor must be of type int, not: {camera_type.dtype}"
+            assert not torch.is_floating_point(camera_type), (
+                f"camera_type tensor must be of type int, not: {camera_type.dtype}"
+            )
             camera_type = camera_type.to(self.device)
             if camera_type.ndim == 0 or camera_type.shape[-1] != 1:
                 camera_type = camera_type.unsqueeze(-1)
@@ -399,14 +400,14 @@ class Cameras(TensorDataclass):
 
         # If the camera indices are an int, then we need to make sure that the camera batch is 1D
         if isinstance(camera_indices, int):
-            assert (
-                len(cameras.shape) == 1
-            ), "camera_indices must be a tensor if cameras are batched with more than 1 batch dimension"
+            assert len(cameras.shape) == 1, (
+                "camera_indices must be a tensor if cameras are batched with more than 1 batch dimension"
+            )
             camera_indices = torch.tensor([camera_indices], device=cameras.device)
 
-        assert camera_indices.shape[-1] == len(
-            cameras.shape
-        ), "camera_indices must have shape (num_rays:..., num_cameras_batch_dims)"
+        assert camera_indices.shape[-1] == len(cameras.shape), (
+            "camera_indices must have shape (num_rays:..., num_cameras_batch_dims)"
+        )
 
         # If keep_shape is True, then we need to make sure that the camera indices in question
         # are all the same height and width and can actually be batched while maintaining the image
@@ -777,15 +778,15 @@ class Cameras(TensorDataclass):
 
             return vr180_origins, directions_stack
 
-        for cam in cam_types:
-            if CameraType.PERSPECTIVE.value in cam_types:
+        for cam_type in cam_types:
+            if CameraType.PERSPECTIVE.value == cam_type:
                 mask = (self.camera_type[true_indices] == CameraType.PERSPECTIVE.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
                 directions_stack[..., 0][mask] = torch.masked_select(coord_stack[..., 0], mask).float()
                 directions_stack[..., 1][mask] = torch.masked_select(coord_stack[..., 1], mask).float()
                 directions_stack[..., 2][mask] = -1.0
 
-            elif CameraType.FISHEYE.value in cam_types:
+            elif CameraType.FISHEYE.value == cam_type:
                 mask = (self.camera_type[true_indices] == CameraType.FISHEYE.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
 
@@ -802,7 +803,7 @@ class Cameras(TensorDataclass):
                 ).float()
                 directions_stack[..., 2][mask] = -torch.masked_select(torch.cos(theta), mask).float()
 
-            elif CameraType.EQUIRECTANGULAR.value in cam_types:
+            elif CameraType.EQUIRECTANGULAR.value == cam_type:
                 mask = (self.camera_type[true_indices] == CameraType.EQUIRECTANGULAR.value).squeeze(-1)  # (num_rays)
                 mask = torch.stack([mask, mask, mask], dim=0)
 
@@ -815,22 +816,22 @@ class Cameras(TensorDataclass):
                 directions_stack[..., 1][mask] = torch.masked_select(torch.cos(phi), mask).float()
                 directions_stack[..., 2][mask] = torch.masked_select(-torch.cos(theta) * torch.sin(phi), mask).float()
 
-            elif CameraType.OMNIDIRECTIONALSTEREO_L.value in cam_types:
+            elif CameraType.OMNIDIRECTIONALSTEREO_L.value == cam_type:
                 ods_origins_circle, directions_stack = _compute_rays_for_omnidirectional_stereo("left")
                 # assign final camera origins
                 c2w[..., :3, 3] = ods_origins_circle
 
-            elif CameraType.OMNIDIRECTIONALSTEREO_R.value in cam_types:
+            elif CameraType.OMNIDIRECTIONALSTEREO_R.value == cam_type:
                 ods_origins_circle, directions_stack = _compute_rays_for_omnidirectional_stereo("right")
                 # assign final camera origins
                 c2w[..., :3, 3] = ods_origins_circle
 
-            elif CameraType.VR180_L.value in cam_types:
+            elif CameraType.VR180_L.value == cam_type:
                 vr180_origins, directions_stack = _compute_rays_for_vr180("left")
                 # assign final camera origins
                 c2w[..., :3, 3] = vr180_origins
 
-            elif CameraType.VR180_R.value in cam_types:
+            elif CameraType.VR180_R.value == cam_type:
                 vr180_origins, directions_stack = _compute_rays_for_vr180("right")
                 # assign final camera origins
                 c2w[..., :3, 3] = vr180_origins
@@ -879,7 +880,7 @@ class Cameras(TensorDataclass):
                 directions_stack[coord_mask] = camera_utils.fisheye624_unproject(masked_coords, camera_params)
 
             else:
-                raise ValueError(f"Camera type {cam} not supported.")
+                raise ValueError(f"Camera type {cam_type} not supported.")
 
         assert directions_stack.shape == (3,) + num_rays_shape + (3,)
 
@@ -1020,3 +1021,34 @@ class Cameras(TensorDataclass):
             self.width = torch.ceil(self.width * scaling_factor).to(torch.int64)
         else:
             raise ValueError("Scale rounding mode must be 'floor', 'round' or 'ceil'.")
+
+    def update_tiling_intrinsics(self, tiling_factor: int) -> None:
+        """
+        Update camera intrinsics based on tiling_factor.
+        Must match tiling logic as defined in dataparser.
+
+        Args:
+            tiling_factor: Tiling factor to apply to the camera intrinsics.
+        """
+        if tiling_factor == 1:
+            return
+
+        num_tiles = tiling_factor**2
+
+        # Compute tile sizes
+        base_tile_w, remainder_w = self.width // tiling_factor, self.width % tiling_factor
+        base_tile_h, remainder_h = self.height // tiling_factor, self.height % tiling_factor
+
+        tile_indices = torch.arange(len(self.cx), device=self.cx.device).unsqueeze(1) % num_tiles
+        row_indices, col_indices = tile_indices // tiling_factor, tile_indices % tiling_factor
+
+        x_offsets = col_indices * base_tile_w + torch.minimum(col_indices, remainder_w)
+        y_offsets = row_indices * base_tile_h + torch.minimum(row_indices, remainder_h)
+
+        # Adjust principal points
+        self.cx = self.cx - x_offsets
+        self.cy = self.cy - y_offsets
+
+        # Adjust height/width
+        self.width = base_tile_w + (col_indices < remainder_w).to(torch.int)
+        self.height = base_tile_h + (row_indices < remainder_h).to(torch.int)

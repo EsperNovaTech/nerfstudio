@@ -28,11 +28,14 @@ The following methods are supported in nerfstudio:
     :maxdepth: 1
     Instant-NGP<instant_ngp.md>
     Splatfacto<splat.md>
+    Splatfacto-W<splatw.md>
     Instruct-NeRF2NeRF<in2n.md>
     Instruct-GS2GS<igs2gs.md>
     SIGNeRF<signerf.md>
     K-Planes<kplanes.md>
     LERF<lerf.md>
+    LiveScene<livescene.md>
+    Feature-Splatting<feature_splatting.md>
     Mip-NeRF<mipnerf.md>
     NeRF<nerf.md>
     Nerfacto<nerfacto.md>
@@ -44,6 +47,9 @@ The following methods are supported in nerfstudio:
     PyNeRF<pynerf.md>
     SeaThru-NeRF<seathru_nerf.md>
     Zip-NeRF<zipnerf.md>
+    BioNeRF<bionerf.md>
+    NeRFtoGSandBack<nerf2gs2nerf.md>
+    OpenNeRF<opennerf.md>
 ```
 
 (own_method_docs)=

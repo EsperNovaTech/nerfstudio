@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Helper functions for visualizing outputs """
+"""Helper functions for visualizing outputs"""
 
 from dataclasses import dataclass
 from typing import Literal, Optional
@@ -111,7 +111,10 @@ def apply_float_colormap(image: Float[Tensor, "*bs 1"], colormap: Colormaps = "v
     image_long_max = torch.max(image_long)
     assert image_long_min >= 0, f"the min value is {image_long_min}"
     assert image_long_max <= 255, f"the max value is {image_long_max}"
-    return torch.tensor(matplotlib.colormaps[colormap].colors, device=image.device)[image_long[..., 0]]
+    return torch.tensor(
+        matplotlib.colormaps[colormap].colors,  # type: ignore
+        device=image.device,
+    )[image_long[..., 0]]
 
 
 def apply_depth_colormap(
@@ -134,8 +137,8 @@ def apply_depth_colormap(
         Colored depth image with colors in [0, 1]
     """
 
-    near_plane = near_plane or float(torch.min(depth))
-    far_plane = far_plane or float(torch.max(depth))
+    near_plane = near_plane if near_plane is not None else float(torch.min(depth))
+    far_plane = far_plane if far_plane is not None else float(torch.max(depth))
 
     depth = (depth - near_plane) / (far_plane - near_plane + 1e-10)
     depth = torch.clip(depth, 0, 1)

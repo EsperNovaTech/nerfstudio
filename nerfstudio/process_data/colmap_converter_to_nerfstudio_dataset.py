@@ -145,9 +145,7 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
             summary_log.append(colmap_utils.get_matching_summary(num_frames, num_matched_frames))
 
         else:
-            CONSOLE.log(
-                "[bold yellow]Warning: Could not find existing COLMAP results. " "Not generating transforms.json"
-            )
+            CONSOLE.log("[bold yellow]Warning: Could not find existing COLMAP results. Not generating transforms.json")
         return summary_log
 
     def _export_depth(self) -> Tuple[Optional[Dict[int, Path]], List[str]]:
@@ -162,7 +160,9 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
             depth_dir = self.output_dir / "depth"
             depth_dir.mkdir(parents=True, exist_ok=True)
             image_id_to_depth_path = colmap_utils.create_sfm_depth(
-                recon_dir=self.output_dir / self.default_colmap_path(),
+                recon_dir=self.absolute_colmap_model_path
+                if self.skip_colmap
+                else self.output_dir / self.default_colmap_path(),
                 output_dir=depth_dir,
                 include_depth_debug=self.include_depth_debug,
                 input_images_dir=self.image_dir,
@@ -222,7 +222,7 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
             )
         elif sfm_tool == "hloc":
             if mask_path is not None:
-                raise RuntimeError("Cannot use a mask with hloc. Please remove the cropping options " "and try again.")
+                raise RuntimeError("Cannot use a mask with hloc. Please remove the cropping options and try again.")
 
             assert feature_type is not None
             assert matcher_type is not None
@@ -239,12 +239,12 @@ class ColmapConverterToNerfstudioDataset(BaseConverterToNerfstudioDataset):
                 use_single_camera_mode=self.use_single_camera_mode,
             )
         else:
-            raise RuntimeError("Invalid combination of sfm_tool, feature_type, and matcher_type, " "exiting")
+            raise RuntimeError("Invalid combination of sfm_tool, feature_type, and matcher_type, exiting")
 
     def __post_init__(self) -> None:
         super().__post_init__()
         install_checks.check_ffmpeg_installed()
-        install_checks.check_colmap_installed()
+        install_checks.check_colmap_installed(self.colmap_cmd)
 
         if self.crop_bottom < 0.0 or self.crop_bottom > 1:
             raise RuntimeError("crop_bottom must be set between 0 and 1.")

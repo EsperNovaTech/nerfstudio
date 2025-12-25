@@ -16,7 +16,6 @@
 Miscellaneous helper code.
 """
 
-
 import platform
 import typing
 import warnings
@@ -45,7 +44,7 @@ def get_dict_to_torch(stuff: T, device: Union[torch.device, str] = "cpu", exclud
                 stuff[k] = get_dict_to_torch(v, device)
         return stuff
     if isinstance(stuff, torch.Tensor):
-        return stuff.to(device)
+        return stuff.to(device)  # type: ignore[reportReturnType]
     return stuff
 
 
@@ -60,7 +59,7 @@ def get_dict_to_cpu(stuff: T) -> T:
             stuff[k] = get_dict_to_cpu(v)
         return stuff
     if isinstance(stuff, torch.Tensor):
-        return stuff.detach().cpu()
+        return stuff.detach().cpu()  # type: ignore[reportReturnType]
     return stuff
 
 

@@ -54,7 +54,7 @@ def quaternion_from_matrix(matrix: NDArray, isprecise: bool = False) -> np.ndarr
         matrix: rotation matrix to obtain quaternion
         isprecise: if True, input matrix is assumed to be precise rotation matrix and a faster algorithm is used.
     """
-    M = np.array(matrix, dtype=np.float64, copy=False)[:4, :4]
+    M = np.array(matrix, dtype=np.float64, copy=True)[:4, :4]
     if isprecise:
         q = np.empty((4,))
         t = np.trace(M)
@@ -172,7 +172,7 @@ def get_interpolated_poses(pose_a: NDArray, pose_b: NDArray, steps: int = 10) ->
     quat_b = quaternion_from_matrix(pose_b[:3, :3])
 
     ts = np.linspace(0, 1, steps)
-    quats = [quaternion_slerp(quat_a, quat_b, t) for t in ts]
+    quats = [quaternion_slerp(quat_a, quat_b, float(t)) for t in ts]
     trans = [(1 - t) * pose_a[:3, 3] + t * pose_b[:3, 3] for t in ts]
 
     poses_ab = []
@@ -199,26 +199,47 @@ def get_interpolated_k(
         List of interpolated camera poses
     """
     Ks: List[Float[Tensor, "3 3"]] = []
-    ts = np.linspace(0, 1, steps)
+    ts = torch.linspace(0, 1, steps, dtype=k_a.dtype, device=k_a.device)
     for t in ts:
         new_k = k_a * (1.0 - t) + k_b * t
         Ks.append(new_k)
     return Ks
 
 
-def get_ordered_poses_and_k(
+def get_interpolated_time(
+    time_a: Float[Tensor, "1"], time_b: Float[Tensor, "1"], steps: int = 10
+) -> List[Float[Tensor, "1"]]:
+    """
+    Returns interpolated time between two camera poses with specified number of steps.
+
+    Args:
+        time_a: camera time 1
+        time_b: camera time 2
+        steps: number of steps the interpolated pose path should contain
+    """
+    times: List[Float[Tensor, "1"]] = []
+    ts = torch.linspace(0, 1, steps, dtype=time_a.dtype, device=time_a.device)
+    for t in ts:
+        new_t = time_a * (1.0 - t) + time_b * t
+        times.append(new_t)
+    return times
+
+
+def get_ordered_poses_and_k_and_time(
     poses: Float[Tensor, "num_poses 3 4"],
     Ks: Float[Tensor, "num_poses 3 3"],
-) -> Tuple[Float[Tensor, "num_poses 3 4"], Float[Tensor, "num_poses 3 3"]]:
+    times: Optional[Float[Tensor, "num_poses 1"]] = None,
+) -> Tuple[Float[Tensor, "num_poses 3 4"], Float[Tensor, "num_poses 3 3"], Optional[Float[Tensor, "num_poses 1"]]]:
     """
     Returns ordered poses and intrinsics by euclidian distance between poses.
 
     Args:
         poses: list of camera poses
         Ks: list of camera intrinsics
+        times: list of camera times
 
     Returns:
-        tuple of ordered poses and intrinsics
+        tuple of ordered poses, intrinsics and times
 
     """
 
@@ -226,28 +247,33 @@ def get_ordered_poses_and_k(
 
     ordered_poses = torch.unsqueeze(poses[0], 0)
     ordered_ks = torch.unsqueeze(Ks[0], 0)
+    ordered_times = torch.unsqueeze(times[0], 0) if times is not None else None
 
     # remove the first pose from poses
     poses = poses[1:]
     Ks = Ks[1:]
+    times = times[1:] if times is not None else None
 
     for _ in range(poses_num - 1):
         distances = torch.norm(ordered_poses[-1][:, 3] - poses[:, :, 3], dim=1)
         idx = torch.argmin(distances)
         ordered_poses = torch.cat((ordered_poses, torch.unsqueeze(poses[idx], 0)), dim=0)
         ordered_ks = torch.cat((ordered_ks, torch.unsqueeze(Ks[idx], 0)), dim=0)
+        ordered_times = torch.cat((ordered_times, torch.unsqueeze(times[idx], 0)), dim=0) if times is not None else None  # type: ignore
         poses = torch.cat((poses[0:idx], poses[idx + 1 :]), dim=0)
         Ks = torch.cat((Ks[0:idx], Ks[idx + 1 :]), dim=0)
+        times = torch.cat((times[0:idx], times[idx + 1 :]), dim=0) if times is not None else None
 
-    return ordered_poses, ordered_ks
+    return ordered_poses, ordered_ks, ordered_times
 
 
 def get_interpolated_poses_many(
     poses: Float[Tensor, "num_poses 3 4"],
     Ks: Float[Tensor, "num_poses 3 3"],
+    times: Optional[Float[Tensor, "num_poses 1"]] = None,
     steps_per_transition: int = 10,
     order_poses: bool = False,
-) -> Tuple[Float[Tensor, "num_poses 3 4"], Float[Tensor, "num_poses 3 3"]]:
+) -> Tuple[Float[Tensor, "num_poses 3 4"], Float[Tensor, "num_poses 3 3"], Optional[Float[Tensor, "num_poses 1"]]]:
     """Return interpolated poses for many camera poses.
 
     Args:
@@ -261,21 +287,27 @@ def get_interpolated_poses_many(
     """
     traj = []
     k_interp = []
+    time_interp = [] if times is not None else None
 
     if order_poses:
-        poses, Ks = get_ordered_poses_and_k(poses, Ks)
+        poses, Ks, times = get_ordered_poses_and_k_and_time(poses, Ks, times)
 
     for idx in range(poses.shape[0] - 1):
         pose_a = poses[idx].cpu().numpy()
         pose_b = poses[idx + 1].cpu().numpy()
-        poses_ab = get_interpolated_poses(pose_a, pose_b, steps=steps_per_transition)
-        traj += poses_ab
+        traj += get_interpolated_poses(pose_a, pose_b, steps=steps_per_transition)
         k_interp += get_interpolated_k(Ks[idx], Ks[idx + 1], steps=steps_per_transition)
+        if times is not None:
+            time_interp += get_interpolated_time(times[idx], times[idx + 1], steps=steps_per_transition)  # type: ignore
 
     traj = np.stack(traj, axis=0)
     k_interp = torch.stack(k_interp, dim=0)
-
-    return torch.tensor(traj, dtype=torch.float32), torch.tensor(k_interp, dtype=torch.float32)
+    time_interp = torch.stack(time_interp, dim=0) if time_interp is not None else None
+    return (
+        torch.tensor(traj, dtype=torch.float32),
+        torch.tensor(k_interp, dtype=torch.float32),
+        torch.tensor(time_interp, dtype=torch.float32) if time_interp is not None else None,
+    )
 
 
 def normalize(x: torch.Tensor) -> Float[Tensor, "*batch"]:
@@ -577,7 +609,8 @@ def auto_orient_and_center_poses(
         oriented_poses = transform @ poses
 
         if oriented_poses.mean(dim=0)[2, 1] < 0:
-            oriented_poses[:, 1:3] = -1 * oriented_poses[:, 1:3]
+            oriented_poses[1:3, :] = -1 * oriented_poses[1:3, :]
+            transform[1:3, :] = -1 * transform[1:3, :]
     elif method in ("up", "vertical"):
         up = torch.mean(poses[:, :3, 1], dim=0)
         up = up / torch.linalg.norm(up)
